@@ -17,24 +17,35 @@
         mode: '0644'
 
     - name: Instalar Wazuh Agent
-      ansible.builtin.command:
-        cmd: >
-          dpkg -i /tmp/wazuh-agent_{{ wazuh_version }}_amd64.deb
-        creates: /etc/ossec-init.conf
+      ansible.builtin.apt:
+        deb: "/tmp/wazuh-agent_{{ wazuh_version }}_amd64.deb"
+        state: present
 
-    - name: Configurar servidor e senha de registro
-      ansible.builtin.command:
-        cmd: >
-          WAZUH_MANAGER='{{ wazuh_ip }}'
-          WAZUH_REGISTRATION_PASSWORD="{{ wazuh_password }}"
-          /usr/bin/systemctl daemon-reexec
-      ignore_errors: yes
+    - name: Configurar endereço do servidor Wazuh
+      ansible.builtin.lineinfile:
+        path: /var/ossec/etc/ossec.conf
+        regexp: '<address>.*</address>'
+        line: "<address>{{ wazuh_ip }}</address>"
+        backup: yes
+
+    - name: Configurar senha de registro no arquivo client.keys (se necessário)
+      ansible.builtin.copy:
+        dest: /var/ossec/etc/local_internal_options.conf
+        content: |
+          registration_password={{ wazuh_password }}
+        mode: '0644'
+
+    - name: Registrar agente no servidor Wazuh (se não estiver registrado)
+      ansible.builtin.shell: |
+        /var/ossec/bin/agent-auth -m {{ wazuh_ip }} -P "{{ wazuh_password }}"
+      args:
+        creates: /var/ossec/etc/client.keys
 
     - name: Habilitar e iniciar serviço Wazuh Agent
       ansible.builtin.systemd:
         name: wazuh-agent
         enabled: yes
-        state: started
+        state: restarted
 
     - name: Limpar arquivo .deb após instalação
       ansible.builtin.file:
