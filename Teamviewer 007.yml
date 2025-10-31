@@ -7,7 +7,7 @@
     teamviewer_version: "teamviewer-host_amd64.deb"
     teamviewer_url: "https://download.teamviewer.com/download/linux/teamviewer-host_amd64.deb"
     teamviewer_assignment_id: "0001CoABChC1doBwE6ER8IVwcOHTKq14EigIACAAAgAJAM3Fqx3YiSeapvhzY1fZ8C0OXCwtZ8U5tipZMciFfn2AGkCxyzcacCO8UWFdx9o9IUS-gm_1hFpKpbQu7dAn5AQyXkQ2JP8BzlG9TP3U_d60grO7ngCTd93lRX8CuELqctwvIAEQocTBxAM="
-  
+
   tasks:
     - name: Baixar TeamViewer Host
       ansible.builtin.get_url:
@@ -99,4 +99,36 @@
         state: present
         timeout: 30
 
-    - name: Verificar se assignment
+    - name: Verificar se assignment foi aplicado
+      ansible.builtin.shell:
+        cmd: teamviewer assignment --status
+      register: assignment_status
+      changed_when: false
+
+    - name: Mostrar status do assignment
+      ansible.builtin.debug:
+        msg: "{{ assignment_status.stdout }}"
+
+    - name: Forçar assignment via API se necessário
+      ansible.builtin.shell:
+        cmd: |
+          teamviewer assignment --id {{ teamviewer_assignment_id }} --alias "{{ ansible_hostname }}" --reassign
+        executable: /bin/bash
+      register: force_assignment
+      ignore_errors: yes
+      when: assignment_status.stdout is defined and 'assigned' not in assignment_status.stdout
+
+    - name: Verificar informações do TeamViewer
+      ansible.builtin.command:
+        cmd: teamviewer --info
+      register: teamviewer_info
+      changed_when: false
+
+    - name: Mostrar informações finais
+      ansible.builtin.debug:
+        msg: "TeamViewer Info: {{ teamviewer_info.stdout }}"
+
+    - name: Limpar arquivo de instalação
+      ansible.builtin.file:
+        path: "/tmp/{{ teamviewer_version }}"
+        state: absent
