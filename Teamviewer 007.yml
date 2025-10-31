@@ -1,0 +1,53 @@
+---
+- name: Instalar e configurar TeamViewer Host
+  hosts: all
+  become: yes
+  gather_facts: yes
+  vars:
+    teamviewer_version: "teamviewer-host_amd64.deb"
+    teamviewer_url: "https://download.teamviewer.com/download/linux/teamviewer-host_amd64.deb"
+    teamviewer_assignment_id: "0001CoABChC1doBwE6ER8IVwcOHTKq14EigIACAAAgAJAM3Fqx3YiSeapvhzY1fZ8C0OXCwtZ8U5tipZMciFfn2AGkCxyzcacCO8UWFdx9o9IUS-gm_1hFpKpbQu7dAn5AQyXkQ2JP8BzlG9TP3U_d60grO7ngCTd93lRX8CuELqctwvIAEQocTBxAM="
+  
+  tasks:
+    - name: Baixar TeamViewer Host
+      ansible.builtin.get_url:
+        url: "{{ teamviewer_url }}"
+        dest: "/tmp/{{ teamviewer_version }}"
+        mode: '0644'
+    
+    - name: Instalar TeamViewer Host
+      ansible.builtin.apt:
+        deb: "/tmp/{{ teamviewer_version }}"
+        state: present
+    
+    - name: Habilitar daemon do TeamViewer
+      ansible.builtin.command:
+        cmd: teamviewer --daemon enable
+      changed_when: true
+    
+    - name: Iniciar daemon do TeamViewer
+      ansible.builtin.command:
+        cmd: teamviewer --daemon start
+      changed_when: true
+      ignore_errors: yes  # Ignora se já estiver rodando
+    
+    - name: Aceitar licença do TeamViewer
+      ansible.builtin.command:
+        cmd: teamviewer license accept
+      changed_when: true
+    
+    - name: Atribuir dispositivo à conta TeamViewer
+      ansible.builtin.shell: |
+        teamviewer assignment --id {{ teamviewer_assignment_id }} --device-alias="{{ ansible_hostname }}"
+      changed_when: true
+      register: assignment_result
+    
+    - name: Mostrar resultado da atribuição
+      ansible.builtin.debug:
+        msg: "{{ assignment_result.stdout_lines }}"
+      when: assignment_result.stdout_lines is defined
+    
+    - name: Limpar arquivo .deb após instalação
+      ansible.builtin.file:
+        path: "/tmp/{{ teamviewer_version }}"
+        state: absent
