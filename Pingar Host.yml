@@ -1,0 +1,17 @@
+---
+- name: Teste de conectividade
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Ping nos hosts
+      ansible.builtin.ping:
+      register: ping_result
+    
+    - name: Mostrar informações do host
+      ansible.builtin.debug:
+        msg: |
+          ✅ Host: {{ inventory_hostname }}
+          🖥️  Sistema: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          💾 Memória: {{ ansible_memtotal_mb }} MB
+          ⏰ Uptime: {{ ansible_uptime_seconds // 3600 }} horas
+          🌐 IP: {{ ansible_default_ipv4.address }}
