@@ -1,5 +1,5 @@
 ---
-- name: Instalar e configurar TeamViewer Host (igual ao processo manual)
+- name: Instalar e configurar TeamViewer Host (processo manual corrigido)
   hosts: all
   become: yes
   gather_facts: yes
@@ -8,66 +8,55 @@
     teamviewer_assignment_id: "0001CoABChC1doBwE6ER8IVwcOHTKq14EigIACAAAgAJAM3Fqx3YiSeapvhzY1fZ8C0OXCwtZ8U5tipZMciFfn2AGkCxyzcacCO8UWFdx9o9IUS-gm_1hFpKpbQu7dAn5AQyXkQ2JP8BzlG9TP3U_d60grO7ngCTd93lRX8CuELqctwvIAEQocTBxAM="
 
   tasks:
-    - name: Mudar para diretório /tmp
-      ansible.builtin.shell:
-        cmd: cd /tmp
-        executable: /bin/bash
-      changed_when: false
+    - name: Baixar TeamViewer para /tmp
+      ansible.builtin.get_url:
+        url: https://download.teamviewer.com/download/linux/teamviewer-host_amd64.deb
+        dest: /tmp/teamviewer-host.deb
+        mode: '0644'
+        timeout: 30
 
-    - name: Baixar TeamViewer (igual ao comando wget)
-      ansible.builtin.shell:
-        cmd: wget -O teamviewer-host.deb https://download.teamviewer.com/download/linux/teamviewer-host_amd64.deb
-        executable: /bin/bash
-      args:
-        chdir: /tmp
-
-    - name: Instalar TeamViewer (igual ao comando apt)
+    - name: Instalar TeamViewer
       ansible.builtin.apt:
         deb: /tmp/teamviewer-host.deb
         state: present
 
     - name: Habilitar daemon do TeamViewer
-      ansible.builtin.shell:
+      ansible.builtin.command:
         cmd: teamviewer --daemon enable
-        executable: /bin/bash
       register: enable_daemon
       changed_when: "'already enabled' not in enable_daemon.stdout"
 
     - name: Iniciar daemon do TeamViewer
-      ansible.builtin.shell:
+      ansible.builtin.command:
         cmd: teamviewer --daemon start
-        executable: /bin/bash
       register: start_daemon
       changed_when: "'already running' not in start_daemon.stdout"
       ignore_errors: yes
 
     - name: Aceitar licença do TeamViewer
-      ansible.builtin.shell:
+      ansible.builtin.command:
         cmd: teamviewer license accept
-        executable: /bin/bash
       register: license_accept
       changed_when: "'already accepted' not in license_accept.stdout"
 
-    - name: Aguardar 5 segundos para serviços estabilizarem
+    - name: Aguardar 10 segundos para serviços estabilizarem
       ansible.builtin.pause:
-        seconds: 5
+        seconds: 10
 
-    - name: Atribuir dispositivo à conta TeamViewer (comando exato)
-      ansible.builtin.shell:
-        cmd: teamviewer assignment --id {{ teamviewer_assignment_id }} --device-alias="{{ ansible_hostname }}"
-        executable: /bin/bash
+    - name: Atribuir dispositivo à conta TeamViewer
+      ansible.builtin.command:
+        cmd: "teamviewer assignment --id {{ teamviewer_assignment_id }} --device-alias '{{ ansible_hostname }}'"
       register: assignment_result
-      async: 45
-      poll: 5
+      async: 60
+      poll: 10
 
     - name: Mostrar resultado da atribuição
       ansible.builtin.debug:
         msg: "Resultado do assignment: {{ assignment_result.stdout }}"
 
     - name: Verificar status do TeamViewer
-      ansible.builtin.shell:
+      ansible.builtin.command:
         cmd: teamviewer --info
-        executable: /bin/bash
       register: teamviewer_info
 
     - name: Mostrar informações do TeamViewer
