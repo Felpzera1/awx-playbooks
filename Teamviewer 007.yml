@@ -1,5 +1,5 @@
 ---
-- name: Instalar e configurar TeamViewer Host
+- name: Instalar e configurar TeamViewer Host de forma não interativa
   hosts: all
   become: yes
   gather_facts: yes
@@ -14,40 +14,64 @@
         url: "{{ teamviewer_url }}"
         dest: "/tmp/{{ teamviewer_version }}"
         mode: '0644'
-    
-    - name: Instalar TeamViewer Host
-      ansible.builtin.apt:
-        deb: "/tmp/{{ teamviewer_version }}"
-        state: present
-    
-    - name: Habilitar daemon do TeamViewer
-      ansible.builtin.command:
-        cmd: teamviewer --daemon enable
-      changed_when: true
-    
-    - name: Iniciar daemon do TeamViewer
-      ansible.builtin.command:
-        cmd: teamviewer --daemon start
-      changed_when: true
-      ignore_errors: yes  # Ignora se já estiver rodando
-    
-    - name: Aceitar licença do TeamViewer
-      ansible.builtin.command:
-        cmd: teamviewer license accept
-      changed_when: true
-    
-    - name: Atribuir dispositivo à conta TeamViewer
-      ansible.builtin.shell: |
-        teamviewer assignment --id {{ teamviewer_assignment_id }} --device-alias="{{ ansible_hostname }}"
-      changed_when: true
-      register: assignment_result
-    
-    - name: Mostrar resultado da atribuição
-      ansible.builtin.debug:
-        msg: "{{ assignment_result.stdout_lines }}"
-      when: assignment_result.stdout_lines is defined
-    
-    - name: Limpar arquivo .deb após instalação
+
+    - name: Configurar variáveis de ambiente para instalação não interativa
+      ansible.builtin.shell:
+        cmd: |
+          export DEBIAN_FRONTEND=noninteractive
+          export TEAMVIEWER_ACCEPT_EULA=yes
+          dpkg -i /tmp/{{ teamviewer_version }} || apt-get install -f -y
+        executable: /bin/bash
+
+    - name: Forçar aceitação de EULA via comando
+      ansible.builtin.shell:
+        cmd: |
+          echo -e "1\n1" | teamviewer setup
+        executable: /bin/bash
+      ignore_errors: yes
+
+    - name: Configurar aceitação via arquivo
+      ansible.builtin.blockinfile:
+        path: /etc/teamviewer/global.conf
+        block: |
+          EulaAccepted = 1
+          DataEulaAccepted = 1
+          ClientAutoStart = 1
+        create: yes
+        mode: '0644'
+
+    - name: Reiniciar serviço TeamViewer
+      ansible.builtin.systemd:
+        name: teamviewerd
+        state: restarted
+        enabled: yes
+
+    - name: Aguardar estabilização do serviço
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Executar assignment de forma não interativa
+      ansible.builtin.shell:
+        cmd: |
+          teamviewer assignment --id {{ teamviewer_assignment_id }} --device-alias="{{ ansible_hostname }}"
+        executable: /bin/bash
+      register: assignment
+      retries: 5
+      delay: 10
+
+    - name: Limpar arquivo de instalação
       ansible.builtin.file:
         path: "/tmp/{{ teamviewer_version }}"
         state: absent
+
+    - name: Verificar instalação
+      ansible.builtin.command:
+        cmd: teamviewer --version
+      register: version_check
+      changed_when: false
+
+    - name: Mostrar resultado final
+      ansible.builtin.debug:
+        msg: |
+          TeamViewer instalado: {{ version_check.stdout }}
+          Assignment: {{ assignment.stdout }}
