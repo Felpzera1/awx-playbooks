@@ -1,0 +1,78 @@
+---
+- name: Instalação do GLPI Agent
+  hosts: all
+  become: yes
+  vars:
+    glpi_agent_version: "1.14"
+    glpi_server_url: "https://atendimento.redetop.com.br/marketplace/glpiinventory"
+    glpi_installer: "glpi-agent-{{ glpi_agent_version }}-linux-installer.pl"
+    glpi_installer_url: "https://github.com/glpi-project/glpi-agent/releases/download/{{ glpi_agent_version }}/{{ glpi_installer }}"
+    httpd_trust_ip: "10.12.6.236"
+    delay_time: "300"
+    temp_dir: "/tmp"
+
+  tasks:
+    - name: Verificar se perl está instalado
+      command: perl --version
+      register: perl_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Instalar perl (Debian/Ubuntu)
+      apt:
+        name: perl
+        state: present
+        update_cache: yes
+      when: 
+        - perl_check.rc != 0
+        - ansible_os_family == "Debian"
+
+    - name: Instalar perl (RedHat/CentOS)
+      yum:
+        name: perl
+        state: present
+      when: 
+        - perl_check.rc != 0
+        - ansible_os_family == "RedHat"
+
+    - name: Baixar o instalador do GLPI Agent
+      get_url:
+        url: "{{ glpi_installer_url }}"
+        dest: "{{ temp_dir }}/{{ glpi_installer }}"
+        mode: '0755'
+        validate_certs: no
+      register: download_result
+
+    - name: Executar instalação do GLPI Agent
+      shell: |
+        perl {{ temp_dir }}/{{ glpi_installer }} \
+          -s="{{ glpi_server_url }}" \
+          --no-ssl-check \
+          --force \
+          --delaytime="{{ delay_time }}" \
+          --tag=$(hostname) \
+          --httpd-trust="{{ httpd_trust_ip }}"
+      args:
+        creates: /usr/bin/glpi-agent
+      register: install_result
+
+    - name: Exibir resultado da instalação
+      debug:
+        var: install_result.stdout_lines
+      when: install_result.stdout_lines is defined
+
+    - name: Verificar status do serviço GLPI Agent
+      systemd:
+        name: glpi-agent
+        state: started
+        enabled: yes
+      when: ansible_service_mgr == "systemd"
+
+    - name: Limpar arquivo temporário do instalador
+      file:
+        path: "{{ temp_dir }}/{{ glpi_installer }}"
+        state: absent
+
+    - name: Exibir mensagem de conclusão
+      debug:
+        msg: "GLPI Agent instalado com sucesso no host {{ ansible_hostname }}"
