@@ -1,6 +1,6 @@
 ---
 - name: Teste de conectividade
-  hosts: "{{ target_host | default('all') }}"
+  hosts: all
   gather_facts: yes
   tasks:
     - name: Ping nos hosts
