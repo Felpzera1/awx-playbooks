@@ -1,0 +1,24 @@
+---
+- name: Instalar Kaspersky
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Copiar script de instalação do Kaspersky
+      copy:
+        src: klnagent64_15.4.0-8952.sh
+        dest: /tmp/klnagent64_15.4.0-8952.sh
+        mode: '0755'
+
+    - name: Executar instalação do Kaspersky
+      shell: /tmp/klnagent64_15.4.0-8952.sh
+      register: resultado_instalacao
+
+    - name: Exibir resultado da instalação
+      debug:
+        var: resultado_instalacao.stdout_lines
+
+    - name: Remover script temporário
+      file:
+        path: /tmp/klnagent64_15.4.0-8952.sh
+        state: absent
