@@ -1,6 +1,6 @@
 ---
 - name: Instalar Kaspersky
-  hosts: all
+  hosts: "{{ target_host | default('all') }}"
   become: yes
 
   tasks:
