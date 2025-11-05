@@ -6,7 +6,7 @@
   vars:
     teamviewer_assignment_id: "0001CoABChC1doBwE6ER8IVwcOHTKq14EigIACAAAgAJAM3Fqx3YiSeapvhzY1fZ8C0OXCwtZ8U5tipZMciFfn2AGkCxyzcacCO8UWFdx9o9IUS-gm_1hFpKpbQu7dAn5AQyXkQ2JP8BzlG9TP3U_d60grO7ngCTd93lRX8CuELqctwvIAEQocTBxAM="
     teamviewer_deb_path: /tmp/teamviewer-host.deb
-    teamviewer_wait_time: 15
+    teamviewer_wait_time: 20
 
   tasks:
     - name: Atualizar cache do APT
@@ -43,6 +43,31 @@
       when: teamviewer_installed.rc != 0
       register: teamviewer_installation
 
+    - name: Corrigir permissões do diretório de configuração
+      ansible.builtin.file:
+        path: /opt/teamviewer/config
+        state: directory
+        mode: '0755'
+        recurse: yes
+
+    - name: Corrigir permissões do arquivo global.conf
+      ansible.builtin.file:
+        path: /opt/teamviewer/config/global.conf
+        state: touch
+        mode: '0644'
+      ignore_errors: yes
+
+    - name: Parar daemon do TeamViewer (se estiver rodando)
+      ansible.builtin.command:
+        cmd: teamviewer --daemon stop
+      register: stop_daemon
+      failed_when: false
+      changed_when: stop_daemon.rc == 0
+
+    - name: Aguardar 3 segundos após stop
+      ansible.builtin.pause:
+        seconds: 3
+
     - name: Habilitar daemon do TeamViewer
       ansible.builtin.command:
         cmd: teamviewer --daemon enable
@@ -57,6 +82,20 @@
       changed_when: "'started' in start_daemon.stdout or start_daemon.rc == 0"
       failed_when: start_daemon.rc != 0 and 'already running' not in start_daemon.stderr
 
+    - name: Aguardar daemon inicializar completamente
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: Reiniciar daemon do TeamViewer para aplicar permissões
+      ansible.builtin.command:
+        cmd: teamviewer --daemon restart
+      register: restart_daemon
+      changed_when: restart_daemon.rc == 0
+
+    - name: Aguardar daemon reiniciar
+      ansible.builtin.pause:
+        seconds: 8
+
     - name: Aceitar licença do TeamViewer
       ansible.builtin.command:
         cmd: teamviewer license accept
@@ -67,9 +106,20 @@
     - name: Aguardar estabilização dos serviços
       ansible.builtin.pause:
         seconds: "{{ teamviewer_wait_time }}"
-        prompt: "Aguardando {{ teamviewer_wait_time }} segundos para serviços do TeamViewer estabilizarem..."
 
-    - name: Verificar se daemon está rodando
+    - name: Verificar se TeamViewer ID foi gerado
+      ansible.builtin.shell:
+        cmd: teamviewer --info | grep "TeamViewer ID:" | awk '{print $3}'
+      register: teamviewer_id_check
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar TeamViewer ID
+      ansible.builtin.debug:
+        msg: "TeamViewer ID: {{ teamviewer_id_check.stdout }}"
+      when: teamviewer_id_check.stdout != ""
+
+    - name: Verificar se daemon está rodando corretamente
       ansible.builtin.command:
         cmd: teamviewer --info
       register: teamviewer_info_pre
@@ -78,7 +128,7 @@
 
     - name: Mostrar status pré-assignment
       ansible.builtin.debug:
-        msg: "Status do TeamViewer antes do assignment: {{ teamviewer_info_pre.stdout_lines }}"
+        msg: "{{ teamviewer_info_pre.stdout_lines }}"
       when: teamviewer_info_pre.rc == 0
 
     - name: Atribuir dispositivo à conta TeamViewer
@@ -86,7 +136,7 @@
         cmd: "teamviewer assignment --id {{ teamviewer_assignment_id }} --device-alias '{{ ansible_hostname }}'"
       register: assignment_result
       retries: 3
-      delay: 5
+      delay: 10
       until: assignment_result.rc == 0
       failed_when: assignment_result.rc != 0 and 'already assigned' not in assignment_result.stderr
       changed_when: assignment_result.rc == 0
@@ -116,9 +166,14 @@
         path: "{{ teamviewer_deb_path }}"
         state: absent
 
-    - name: Agendar reinicialização (opcional)
+    - name: Mensagem final
       ansible.builtin.debug:
-        msg: "ATENÇÃO: Considere reiniciar o sistema com 'sudo reboot' para garantir que todas as configurações sejam aplicadas."
+        msg: |
+          ========================================
+          Instalação do TeamViewer concluída!
+          Considere reiniciar o sistema para garantir estabilidade.
+          Comando: sudo reboot
+          ========================================
 
     # Descomente as linhas abaixo se quiser reiniciar automaticamente
     # - name: Reiniciar o sistema
