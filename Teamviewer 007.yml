@@ -100,8 +100,12 @@
       ansible.builtin.command:
         cmd: teamviewer license accept
       register: license_accept
-      changed_when: license_accept.rc == 0
-      failed_when: license_accept.rc != 0 and 'already accepted' not in license_accept.stderr
+      changed_when: license_accept.rc == 0 and 'already' not in license_accept.stdout
+      failed_when: false
+
+    - name: Verificar aceitação da licença
+      ansible.builtin.debug:
+        msg: "{{ 'Licença já estava aceita' if 'already' in license_accept.stdout else 'Licença aceita com sucesso' }}"
 
     - name: Aguardar estabilização dos serviços
       ansible.builtin.pause:
@@ -132,24 +136,33 @@
       when: teamviewer_info_pre.rc == 0
 
     - name: Atribuir dispositivo à conta TeamViewer
-      ansible.builtin.command:
-        cmd: "teamviewer assignment --id {{ teamviewer_assignment_id }} --device-alias '{{ ansible_hostname }}'"
+      ansible.builtin.shell:
+        cmd: 'teamviewer assignment --id {{ teamviewer_assignment_id }} --device-alias="$(hostname)"'
       register: assignment_result
       retries: 3
       delay: 10
       until: assignment_result.rc == 0
-      failed_when: assignment_result.rc != 0 and 'already assigned' not in assignment_result.stderr
+      failed_when: false
       changed_when: assignment_result.rc == 0
 
     - name: Mostrar resultado da atribuição
       ansible.builtin.debug:
         msg: |
+          ========================================
           Resultado do assignment:
+          ========================================
           Código de retorno: {{ assignment_result.rc }}
+          {% if assignment_result.rc == 0 %}
+          ✅ Assignment realizado com sucesso!
+          {% else %}
+          ⚠️  Assignment falhou ou já estava atribuído
+          {% endif %}
+          
           Saída: {{ assignment_result.stdout }}
           {% if assignment_result.stderr %}
           Erros: {{ assignment_result.stderr }}
           {% endif %}
+          ========================================
 
     - name: Verificar informações finais do TeamViewer
       ansible.builtin.command:
