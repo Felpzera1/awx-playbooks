@@ -137,7 +137,7 @@
 
     - name: Atribuir dispositivo à conta TeamViewer
       ansible.builtin.shell:
-        cmd: 'teamviewer assignment --id {{ teamviewer_assignment_id }} --device-alias="$(hostname)"'
+        cmd: 'teamviewer assignment --id {{ teamviewer_assignment_id }} --device-alias="$(hostname) - Linux"'
       register: assignment_result
       retries: 3
       delay: 10
@@ -187,13 +187,4 @@
           Considere reiniciar o sistema para garantir estabilidade.
           Comando: sudo reboot
           ========================================
-
-    # Descomente as linhas abaixo se quiser reiniciar automaticamente
-    # - name: Reiniciar o sistema
-    #   ansible.builtin.reboot:
-    #     msg: "Reiniciando após instalação do TeamViewer"
-    #     connect_timeout: 5
-    #     reboot_timeout: 300
-    #     pre_reboot_delay: 5
-    #     post_reboot_delay: 30
-    #     test_command: uptime
+          
